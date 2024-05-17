@@ -10,7 +10,7 @@ The project is structured into three main phases, each corresponding to a notebo
 
 2. **Mood Classification of Spotify Songs with Machine Learning (`main.ipynb`):** Utilizes the concatenated dataset to train and evaluate machine learning models, ultimately labeling a large, unlabeled dataset of Spotify songs.
 
-3. **Refining the Main Labeled Dataset for Primary Artist Focus (`clean_labeled_dataset.ipynb`):** Cleans the labeled dataset to focus solely on the primary artist, enhancing usability for playlist generation and other applications.
+3. **Refining the Main Labeled Dataset for Primary Artist Focus (`clean_labeled_dataset.ipynb`):** Cleans the labeled dataset to focus solely on the primary artist, enhancing usability for playlist generation and other applications. It also provides a quick subjective evaluation of the labeled dataset.
 
 ## Getting Started
 
@@ -30,7 +30,7 @@ Run the `concat_datasets.ipynb` notebook first. This notebook will merge two sep
 
 ### Step 4: Train the Classification Model
 
-Next, proceed with the `main.ipynb` notebook. This notebook trains a machine learning model on the concatenated dataset and labels a larger, unlabeled dataset with mood categories. The default classifier is XGBoost, but instructions are provided if you wish to switch to a Random Forest model.
+Next, proceed with the `main.ipynb` notebook. This notebook trains a machine learning model on the concatenated dataset and labels a larger, unlabeled dataset with mood categories. The default classifier is Random Forest, but instructions are provided if you wish to switch to XGBoost.
 
 ### Step 5: Clean the Labeled Dataset
 
