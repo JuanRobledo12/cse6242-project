@@ -28,7 +28,7 @@ Labels: {'sad': 0, 'happy': 1, 'energetic': 2, 'calm': 3}
 
 ## Classification Model
 
-The model was trained using the following audio features:
+The model was trained in the [model.ipynb](model.ipynb) notebook using the following audio features:
 
 - energy
 - danceability
