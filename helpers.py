@@ -3,7 +3,10 @@ import matplotlib.ticker as ticker
 import seaborn as sns
 from scipy.stats import ttest_ind
 from scipy.stats import pointbiserialr
+from scipy.stats import f_oneway
+from sklearn.feature_selection import mutual_info_classif
 from sklearn.model_selection import train_test_split
+import pandas as pd
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score, roc_curve
 import csv
 import os
@@ -39,20 +42,22 @@ class MultiplePlotMaker:
         plt.show()
         
     
-    def plot_multiple_side_by_side_boxplots(self, df):
-        column_names = self.get_column_names()
-        target_variable_name = column_names.pop(-1)  
+    def plot_multiple_side_by_side_boxplots(self, df, cols_to_avoid = []):
+        # Plot boxplots for each numeric feature
+        column_names = list(df.select_dtypes(include=['float64', 'int64']).columns)
+        target_variable_name = column_names.pop(-1)
 
         # Create boxplots to identify outliers
-        fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(15, 10))
+        fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(15, 10))
 
         # Flatten the axes array for easier iteration
         axes = axes.flatten()
 
         # Plot each boxplot
         for i, col in enumerate(column_names):
-            sns.boxplot(data=df, x=target_variable_name, y=col, ax=axes[i])
-            axes[i].set_title(f'Side-by-side boxplot of {col}')
+            if col not in cols_to_avoid:
+                sns.boxplot(data=df, x=target_variable_name, y=col, ax=axes[i])
+                axes[i].set_title(f'Side-by-side boxplot of {col}')
 
         # Hide empty subplots
         for j in range(i + 1, len(axes)):
@@ -63,11 +68,11 @@ class MultiplePlotMaker:
         plt.show()
 
     def plot_multiple_overlapping_hist(self, df):
-        column_names = self.get_column_names()
+        column_names = list(df.columns)
         target_variable_name = column_names.pop(-1)  
 
         # Create subplots
-        fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(15, 10))
+        fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(15, 10))
 
         # Flatten the axes array for easier iteration
         axes = axes.flatten()
@@ -99,41 +104,42 @@ class StatAnalysisTools:
     def __init__(self):
         pass
 
-    def perform_t_test(self, df):
-
-        target_column_name = df.columns[-1] 
-
-        for col in df.columns[:-1]:  # Exclude the target column
-            group1 = df[df[target_column_name] == 0][col]
-            group2 = df[df[target_column_name] == 1][col]
-            t_stat, p_value = ttest_ind(group1, group2)
-            print(f"{col}: t_stat = {t_stat},  p-value = {p_value}")
+    def anova_test(self, df, target_col):
+        features = df.select_dtypes(include=['float64', 'int64']).columns.drop(target_col)
+        results = {}
+        for feature in features:
+            groups = [df[feature][df[target_col] == cls] for cls in df[target_col].unique()]
+            f_val, p_val = f_oneway(*groups)
+            results[feature] = p_val
+        
+        return results
     
-    def perform_correlation_binary_target(self, df):
-        '''
-        the point-biserial correlation (a special case of Pearson correlation for binary target variables) 
-        to see how strongly each feature is associated with the target.
-        '''
 
-        for column in df.columns[:-1]:  # Exclude the target column
-            correlation, p_value = pointbiserialr(df[column], df['Outcome'])
-            print(f"{column}: correlation = {correlation}, p-value = {p_value}")
+    def mutual_info(self, df, target_col):
+        X = df.drop(columns=[target_col])
+        y = df[target_col]
+        mi = mutual_info_classif(X, y)
+        mi_series = pd.Series(mi, index=X.columns)
+
+        print( mi_series.sort_values(ascending=False))
+        return
 
 class ModelEvaluation:
     def __init__(self) -> None:
         pass
     
-    def evaluate_classifier(self, X_test, y_test, trained_model, model_name, scaler_name, selected_features, csv_file_path):
-        
+    def evaluate_classifier(self, X_test, y_test, trained_model):
+        # Predict class labels
         y_pred = trained_model.predict(X_test)
-        y_pred_proba = trained_model.predict_proba(X_test)[:, 1]  # For ROC-AUC
+        # Predict probabilities for ROC-AUC calculation
+        y_pred_proba = trained_model.predict_proba(X_test)  # Multiclass probabilities
 
-        # Calculate various metrics
+        # Calculate various metrics for multiclass
         accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred)
-        recall = recall_score(y_test, y_pred)
-        f1 = f1_score(y_test, y_pred)
-        roc_auc = roc_auc_score(y_test, y_pred_proba)
+        precision = precision_score(y_test, y_pred, average='weighted')  # 'weighted' for multiclass imbalance
+        recall = recall_score(y_test, y_pred, average='weighted')
+        f1 = f1_score(y_test, y_pred, average='weighted')
+        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr')  # Specify 'ovr' for multiclass ROC-AUC
         conf_matrix = confusion_matrix(y_test, y_pred)
 
         # Print the results
@@ -152,24 +158,18 @@ class ModelEvaluation:
         plt.ylabel('True Label')
         plt.show()
 
-        # Plot ROC curve
-        fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba)
+        # Plot ROC curve for each class
         plt.figure(figsize=(8, 6))
-        plt.plot(fpr, tpr, color='blue', label=f'ROC Curve (AUC = {roc_auc:.3f})')
+        for i in range(len(trained_model.classes_)):
+            # Compute ROC curve for each class
+            fpr, tpr, _ = roc_curve(y_test == i, y_pred_proba[:, i])  # One-vs-rest ROC curve
+            # Calculate AUC for each class separately
+            auc_score = roc_auc_score(y_test == i, y_pred_proba[:, i]) 
+            plt.plot(fpr, tpr, label=f'Class {i} (AUC = {auc_score:.3f})')
+
         plt.plot([0, 1], [0, 1], color='red', linestyle='--')  # Diagonal line
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate (Recall)')
-        plt.title('Receiver Operating Characteristic (ROC) Curve')
+        plt.title('Receiver Operating Characteristic (ROC) Curve for Each Class')
         plt.legend()
         plt.show()
-
-        # Append results to CSV
-        file_exists = os.path.isfile(csv_file_path)
-        with open(csv_file_path, 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            if not file_exists:
-                # Write the header if the file doesn't exist
-                writer.writerow(['model_name', 'scaler_name', 'selected_features', 'accuracy', 'precision', 'recall', 'f1_score', 'roc_auc'])
-            
-            # Write the data
-            writer.writerow([model_name, scaler_name, selected_features, accuracy, precision, recall, f1, roc_auc])
